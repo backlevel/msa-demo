@@ -24,15 +24,16 @@ public class RedisConfig {
     /**
      * 직렬화에 쓸 ObjectMapper
      * - activateDefaultTyping: 역직렬화 시 정확한 타입 복원을 위해 타입 정보 포함
+     * API용 기본 ObjectMapper와 충돌하지 않도록 @Bean을 제거하고
+     * Redis 직렬화 전용으로만 사용합니다.
      */
-    @Bean
-    public ObjectMapper redisObjectMapper() {
+    private ObjectMapper createRedisObjectMapper()  {
         ObjectMapper mapper = new ObjectMapper();
         mapper.registerModule(new JavaTimeModule());
         mapper.activateDefaultTyping(
-            LaissezFaireSubTypeValidator.instance,
-            ObjectMapper.DefaultTyping.NON_FINAL,
-            JsonTypeInfo.As.PROPERTY
+                LaissezFaireSubTypeValidator.instance,
+                ObjectMapper.DefaultTyping.NON_FINAL,
+                JsonTypeInfo.As.PROPERTY
         );
         return mapper;
     }
@@ -44,7 +45,10 @@ public class RedisConfig {
      * - TTL  : 10분 (기본값)
      * - null 값은 캐싱하지 않음
      */
-    private RedisCacheConfiguration defaultCacheConfig(ObjectMapper mapper) {
+    private RedisCacheConfiguration defaultCacheConfig() {
+        // 내부에서 전용 Mapper를 생성하여 Serializer에 주입
+        ObjectMapper mapper = createRedisObjectMapper();
+
         GenericJackson2JsonRedisSerializer jsonSerializer =
             new GenericJackson2JsonRedisSerializer(mapper);
 
@@ -67,10 +71,9 @@ public class RedisConfig {
      */
     @Bean
     public RedisCacheManager cacheManager(
-            RedisConnectionFactory factory,
-            ObjectMapper redisObjectMapper) {
+            RedisConnectionFactory factory) {
 
-        RedisCacheConfiguration base = defaultCacheConfig(redisObjectMapper);
+        RedisCacheConfiguration base = defaultCacheConfig();
 
         Map<String, RedisCacheConfiguration> configs = Map.of(
             "products",     base.entryTtl(Duration.ofMinutes(10)),

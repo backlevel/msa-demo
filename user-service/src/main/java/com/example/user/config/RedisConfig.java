@@ -21,8 +21,11 @@ import java.util.Map;
 @EnableCaching
 public class RedisConfig {
 
-    @Bean
-    public ObjectMapper redisObjectMapper() {
+    /**
+     * API용 기본 ObjectMapper와 충돌하지 않도록 @Bean을 제거하고
+     * Redis 직렬화 전용으로만 사용합니다.
+     */
+    private ObjectMapper createRedisObjectMapper()  {
         ObjectMapper mapper = new ObjectMapper();
         mapper.registerModule(new JavaTimeModule());
         mapper.activateDefaultTyping(
@@ -33,7 +36,10 @@ public class RedisConfig {
         return mapper;
     }
 
-    private RedisCacheConfiguration defaultCacheConfig(ObjectMapper mapper) {
+    private RedisCacheConfiguration defaultCacheConfig() {
+        // 내부에서 전용 Mapper를 생성하여 Serializer에 주입
+        ObjectMapper mapper = createRedisObjectMapper();
+
         return RedisCacheConfiguration.defaultCacheConfig()
             .entryTtl(Duration.ofMinutes(30))
             .disableCachingNullValues()
@@ -51,10 +57,9 @@ public class RedisConfig {
      */
     @Bean
     public RedisCacheManager cacheManager(
-            RedisConnectionFactory factory,
-            ObjectMapper redisObjectMapper) {
+            RedisConnectionFactory factory) {
 
-        RedisCacheConfiguration base = defaultCacheConfig(redisObjectMapper);
+        RedisCacheConfiguration base = defaultCacheConfig();
 
         Map<String, RedisCacheConfiguration> configs = Map.of(
             "users",     base.entryTtl(Duration.ofMinutes(30)),
