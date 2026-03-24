@@ -1,4 +1,4 @@
-\xEF\xBB\xBF# ============================================================
+# ============================================================
 # Redis Cache Test Script (Windows PowerShell)
 # Run: .\test-cache.ps1
 # ============================================================
@@ -14,18 +14,18 @@ function Write-Info($msg) { Write-Host "  [i]  $msg" -ForegroundColor Cyan }
 Write-Step "0. Prepare Test Product"
 $p = Invoke-RestMethod -Uri "$BASE/products" -Method POST -Headers $headers `
   -Body '{"name":"Cache Test Item","price":10000,"stock":50}'
-$pid = $p.id
-Write-Ok "Product created: id=$pid"
+$productId = $p.id
+Write-Ok "Product created: id=$productId"
 
 # CACHE MISS: first call
 Write-Step "1. CACHE MISS - First call (DB query + save to Redis)"
-$t1 = Measure-Command { Invoke-RestMethod -Uri "$BASE/products/$pid" | Out-Null }
+$t1 = Measure-Command { Invoke-RestMethod -Uri "$BASE/products/$productId" | Out-Null }
 Write-Ok "Response: $([math]::Round($t1.TotalMilliseconds))ms"
-Write-Info "Check Docker logs for: [Cache MISS] products::$pid"
+Write-Info "Check Docker logs for: [Cache MISS] products::$productId"
 
 # CACHE HIT: second call
 Write-Step "2. CACHE HIT - Second call (returned from Redis, no DB query)"
-$t2 = Measure-Command { Invoke-RestMethod -Uri "$BASE/products/$pid" | Out-Null }
+$t2 = Measure-Command { Invoke-RestMethod -Uri "$BASE/products/$productId" | Out-Null }
 Write-Ok "Response: $([math]::Round($t2.TotalMilliseconds))ms"
 Write-Info "No SELECT query in Docker logs"
 
@@ -38,19 +38,19 @@ docker exec msa-demo-ver3-redis-1 redis-cli KEYS "*products*"
 
 # CACHE EVICT: decrease stock
 Write-Step "4. CACHE EVICT - Decrease stock invalidates cache"
-Invoke-RestMethod -Uri "$BASE/products/$pid/stock?quantity=5" -Method PATCH | Out-Null
-Write-Ok "Stock decreased -> products::$pid cache deleted"
-Write-Info "Check logs for: [Cache] products::$pid deleted"
+Invoke-RestMethod -Uri "$BASE/products/$productId/stock?quantity=5" -Method PATCH | Out-Null
+Write-Ok "Stock decreased -> products::$productId cache deleted"
+Write-Info "Check logs for: [Cache] products::$productId deleted"
 
 # After evict: MISS again
 Write-Step "5. After evict - CACHE MISS again"
-$t3 = Measure-Command { Invoke-RestMethod -Uri "$BASE/products/$pid" | Out-Null }
+$t3 = Measure-Command { Invoke-RestMethod -Uri "$BASE/products/$productId" | Out-Null }
 Write-Ok "Response: $([math]::Round($t3.TotalMilliseconds))ms"
 Write-Info "Check logs for: [Cache MISS] again"
 
 # TTL check
 Write-Step "6. TTL Check (products TTL = 10 min = 600 sec)"
-docker exec msa-demo-ver3-redis-1 redis-cli TTL "products::$pid"
+docker exec msa-demo-ver3-redis-1 redis-cli TTL "products::$productId"
 Write-Info "Number above = remaining TTL in seconds (close to 600 = OK)"
 
 Write-Host "`n=== Cache Test Completed ===" -ForegroundColor Green

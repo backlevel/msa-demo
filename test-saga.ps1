@@ -1,4 +1,4 @@
-\xEF\xBB\xBF# ============================================================
+# ============================================================
 # Kafka Saga Pattern Test (Windows PowerShell)
 # Scenario 1: Success  /  Scenario 2: Compensation
 # Run: .\test-saga.ps1
