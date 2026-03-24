@@ -1,0 +1,149 @@
+services:
+  # ── 인프라 ─────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    networks: [msa-net]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 5
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+    networks: [msa-net]
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      retries: 5
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    ports:
+      - "19092:9092"
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:19092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    networks: [msa-net]
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:19092"]
+      interval: 15s
+      retries: 8
+
+  # ── Zipkin 분산 추적 (선택사항) ────────────────────────────
+  zipkin:
+    image: openzipkin/zipkin
+    ports:
+      - "19411:9411"
+    networks: [msa-net]
+    profiles: ["tracing"]
+
+  # ── config-server ──────────────────────────────────────
+  # (독립 실행 - 다른 서비스가 의존하지 않음)
+  config-server:
+    build:
+      context: .
+      dockerfile: config-server/Dockerfile
+    ports:
+      - "8888:8888"
+    networks: [msa-net]
+
+  # ── eureka-server ───────────────────────────────────────
+  eureka-server:
+    build:
+      context: .
+      dockerfile: eureka-server/Dockerfile
+    ports:
+      - "8761:8761"
+    networks: [msa-net]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8761/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  # ── api-gateway ─────────────────────────────────────────
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    ports:
+      - "8080:8080"
+    networks: [msa-net]
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+    environment:
+      - EUREKA_SERVER=http://eureka-server:8761/eureka/
+
+  # ── 마이크로서비스 ──────────────────────────────────────
+  user-service:
+    build:
+      context: .
+      dockerfile: user-service/Dockerfile
+    networks: [msa-net]
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      - EUREKA_SERVER=http://eureka-server:8761/eureka/
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+
+  order-service:
+    build:
+      context: .
+      dockerfile: order-service/Dockerfile
+    networks: [msa-net]
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      - EUREKA_SERVER=http://eureka-server:8761/eureka/
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+
+  product-service:
+    build:
+      context: .
+      dockerfile: product-service/Dockerfile
+    networks: [msa-net]
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      - EUREKA_SERVER=http://eureka-server:8761/eureka/
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+
+networks:
+  msa-net:
+    driver: bridge

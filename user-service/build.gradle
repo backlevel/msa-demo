@@ -1,0 +1,19 @@
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+
+    // Eureka
+    implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
+
+    // Kafka (Saga 이벤트 수신용)
+    implementation 'org.springframework.kafka:spring-kafka'
+
+    // Zipkin 분산 추적
+    implementation 'io.micrometer:micrometer-tracing-bridge-brave'
+    implementation 'io.zipkin.reporter2:zipkin-reporter-brave'
+
+    // H2 인메모리 DB (개발용)
+    runtimeOnly 'com.h2database:h2'
+}

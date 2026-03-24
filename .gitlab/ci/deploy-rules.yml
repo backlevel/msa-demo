@@ -1,0 +1,46 @@
+# .gitlab/ci/deploy-rules.yml
+# 재사용 가능한 배포 규칙 및 공통 앵커 정의
+# .gitlab-ci.yml에서 !reference 로 참조
+
+# ── 브랜치별 실행 규칙 ──────────────────────────────────────
+.rules:
+  only_test:
+    rules:
+      - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      - if: '$CI_COMMIT_BRANCH =~ /^feature\/.*$/'
+
+  test_and_build:
+    rules:
+      - if: '$CI_COMMIT_BRANCH == "develop"'
+
+  full_pipeline:
+    rules:
+      - if: '$CI_COMMIT_BRANCH == "main"'
+
+# ── 공통 환경 변수 ────────────────────────────────────────────
+.env:
+  aws_base:
+    variables:
+      AWS_DEFAULT_REGION: ap-northeast-2
+      ECS_CLUSTER: msa-demo-cluster
+
+# ── 롤백 잡 (수동 실행용) ────────────────────────────────────
+.rollback_template:
+  stage: deploy
+  image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
+  when: manual
+  script:
+    - |
+      PREV_REV=$(aws ecs describe-services \
+        --cluster $ECS_CLUSTER \
+        --services $SERVICE_NAME \
+        --region $AWS_DEFAULT_REGION \
+        --query 'services[0].taskDefinition' \
+        --output text | grep -o '[0-9]*$')
+      ROLLBACK_REV=$((PREV_REV - 1))
+      echo "롤백: $SERVICE_NAME → revision $ROLLBACK_REV"
+      aws ecs update-service \
+        --cluster $ECS_CLUSTER \
+        --service $SERVICE_NAME \
+        --task-definition "$SERVICE_NAME:$ROLLBACK_REV" \
+        --region $AWS_DEFAULT_REGION

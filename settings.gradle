@@ -1,0 +1,10 @@
+rootProject.name = 'msa-demo'
+
+include(
+    'eureka-server',
+    'config-server',
+    'api-gateway',
+    'user-service',
+    'order-service',
+    'product-service'
+)

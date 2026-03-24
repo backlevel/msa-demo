@@ -1,0 +1,49 @@
+{
+  "family": "order-service",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/ecsTaskExecutionRole",
+  "taskRoleArn":      "arn:aws:iam::${AWS_ACCOUNT_ID}:role/ecsTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "order-service",
+      "image": "${ECR_REGISTRY}/order-service:latest",
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "SPRING_PROFILES_ACTIVE", "value": "prod" },
+        { "name": "EUREKA_SERVER",          "value": "http://eureka-server.msa-demo.local:8761/eureka/" },
+        { "name": "REDIS_HOST",             "value": "redis.msa-demo.local" },
+        { "name": "REDIS_PORT",             "value": "6379" },
+        { "name": "KAFKA_BOOTSTRAP_SERVERS","value": "kafka.msa-demo.local:9092" }
+      ],
+      "secrets": [
+        {
+          "name": "SPRING_DATASOURCE_PASSWORD",
+          "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:${AWS_ACCOUNT_ID}:secret:msa-demo/db-password"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group":         "/ecs/order-service",
+          "awslogs-region":        "ap-northeast-2",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "healthCheck": {
+        "command":     ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"],
+        "interval":    30,
+        "timeout":     5,
+        "retries":     3,
+        "startPeriod": 60
+      }
+    }
+  ]
+}

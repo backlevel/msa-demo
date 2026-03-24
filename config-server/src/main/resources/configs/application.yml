@@ -1,0 +1,16 @@
+# configs/application.yml
+# 모든 마이크로서비스에 공통 적용되는 설정
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: http://zipkin:9411/api/v2/spans
+
+logging:
+  pattern:
+    level: "%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-}]"
+  level:
+    com.example: DEBUG

@@ -1,0 +1,64 @@
+# order-service/src/main/resources/application-prod.yml
+# ECS 운영 환경 전용 설정 (로컬 application.yml 오버라이드)
+
+spring:
+  # H2 대신 RDS 사용
+  datasource:
+    url: jdbc:mysql://${DB_HOST}:3306/orderdb?useSSL=true&serverTimezone=Asia/Seoul
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate    # 운영에서는 validate (자동 스키마 변경 금지)
+    show-sql: false         # 운영에서는 SQL 로그 비활성화
+    database-platform: org.hibernate.dialect.MySQL8Dialect
+
+  # ElastiCache (Redis Cluster)
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: 20
+          max-idle: 10
+          min-idle: 5
+
+  # MSK (Amazon Managed Streaming for Kafka)
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+    producer:
+      acks: all
+      retries: 5
+      compression-type: lz4   # 운영: 압축 활성화
+    consumer:
+      auto-offset-reset: earliest
+
+# Eureka: ECS Service Discovery 사용 시 비활성화 가능
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_SERVER}
+  instance:
+    prefer-ip-address: true
+    lease-renewal-interval-in-seconds: 10    # 운영: 빠른 감지
+    lease-expiration-duration-in-seconds: 30
+
+# 운영 로그: INFO 레벨
+logging:
+  level:
+    root: INFO
+    com.example: INFO
+    org.hibernate.SQL: WARN
+
+management:
+  tracing:
+    sampling:
+      probability: 0.1   # 운영: 10% 샘플링 (비용 절감)
