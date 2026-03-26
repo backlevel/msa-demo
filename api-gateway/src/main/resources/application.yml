@@ -29,6 +29,14 @@ spring:
           filters:
             - StripPrefix=1
 
+        # ── AI Service ────────────────────────────────────
+        - id: ai-service
+          uri: lb://AI-SERVICE
+          predicates:
+            - Path=/api/ai/**
+          filters:
+            - StripPrefix=1
+
 eureka:
   client:
     service-url:

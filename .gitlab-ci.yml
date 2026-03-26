@@ -21,7 +21,7 @@ image: eclipse-temurin:17-jdk-alpine
 variables:
   GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.caching=true"
   DOCKER_DRIVER: overlay2
-  SERVICES: "order-service user-service product-service api-gateway eureka-server config-server"
+  SERVICES: "order-service user-service product-service api-gateway eureka-server config-server ai-service"
 
 # 스테이지 순서 정의
 stages:
@@ -109,6 +109,15 @@ build:product-service:
     paths: [product-service.tar]
     expire_in: 1 hour
 
+build:ai-service:
+  <<: *build_template
+  script:
+    - docker build -f ai-service/Dockerfile -t ai-service:$CI_COMMIT_SHORT_SHA .
+    - docker save ai-service:$CI_COMMIT_SHORT_SHA > ai-service.tar
+  artifacts:
+    paths: [ai-service.tar]
+    expire_in: 1 hour
+
 # ============================================================
 # STAGE 3: push to ECR  (main 브랜치만)
 # ============================================================
@@ -155,6 +164,16 @@ push:product-service:
     - docker push $ECR_REGISTRY/product-service:$CI_COMMIT_SHORT_SHA
     - docker push $ECR_REGISTRY/product-service:latest
 
+push:ai-service:
+  <<: *push_template
+  needs: [build:ai-service]
+  script:
+    - docker load < ai-service.tar
+    - docker tag ai-service:$CI_COMMIT_SHORT_SHA $ECR_REGISTRY/ai-service:$CI_COMMIT_SHORT_SHA
+    - docker tag ai-service:$CI_COMMIT_SHORT_SHA $ECR_REGISTRY/ai-service:latest
+    - docker push $ECR_REGISTRY/ai-service:$CI_COMMIT_SHORT_SHA
+    - docker push $ECR_REGISTRY/ai-service:latest
+
 # ============================================================
 # STAGE 4: deploy to ECS  (main 브랜치만, 수동 승인)
 # ============================================================
@@ -195,6 +214,16 @@ deploy:product-service:
     SERVICE_NAME: product-service
     ECS_CLUSTER: msa-demo-cluster
     ECS_SERVICE: product-service
+
+deploy:ai-service:
+  <<: *deploy_template
+  needs: [push:ai-service]
+  script:
+    - !reference [.scripts, ecs_deploy]
+  variables:
+    SERVICE_NAME: ai-service
+    ECS_CLUSTER: msa-demo-cluster
+    ECS_SERVICE: ai-service
 
 # ── 공통 스크립트 ────────────────────────────────────────────
 .scripts:
@@ -252,7 +281,7 @@ deploy:product-service:
 notify:success:
   stage: deploy
   image: alpine:latest
-  needs: [deploy:order-service, deploy:user-service, deploy:product-service]
+  needs: [deploy:order-service, deploy:user-service, deploy:product-service, deploy:ai-service]
   script:
     - apk add --no-cache curl
     - |

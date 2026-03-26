@@ -254,3 +254,150 @@ management:
     sampling:
       probability: 1.0  # 0.0 → 1.0 으로 변경
 ```
+
+---
+
+## AI 기능 (ai-service)
+
+### 사전 준비 - API 키 설정
+
+```powershell
+# 프로젝트 루트에 .env 파일 생성
+Copy-Item .env.example .env
+# .env 파일 열어서 실제 키 입력
+notepad .env
+```
+
+| 환경변수 | 발급 경로 |
+|----------|-----------|
+| `GEMINI_API_KEY` | https://makersuite.google.com/app/apikey |
+| `SLACK_BOT_TOKEN` | https://api.slack.com/apps > Create App > Bot Token |
+| `SLACK_CHANNEL` | Slack 채널명 (예: #customer-support) |
+
+### 실행
+
+```powershell
+# .env 파일 설정 후
+docker compose up --build
+```
+
+`ai-service`가 포트 8090으로 뜹니다.
+
+---
+
+### 기능 1 — Google Gemini API 연동
+
+단순 텍스트 생성:
+
+```powershell
+Invoke-RestMethod "http://localhost:8090/ai/generate" -Method POST `
+  -ContentType "application/json" `
+  -Body '{"prompt": "Spring Boot MSA 장점 3가지 설명해줘"}'
+```
+
+---
+
+### 기능 2 — RAG 기반 고객 응대
+
+지식베이스(배송/반품/주문/재고/회원 FAQ)를 검색해 답변하고, 해결 못 한 경우 Slack으로 에스컬레이션합니다.
+
+```powershell
+# 첫 번째 질문
+Invoke-RestMethod "http://localhost:8090/ai/chat" -Method POST `
+  -ContentType "application/json" `
+  -Body '{"userId":"user-001","message":"배송이 언제 오나요?","notifySlack":true}'
+
+# 같은 세션으로 연속 대화 (컨텍스트 유지)
+Invoke-RestMethod "http://localhost:8090/ai/chat" -Method POST `
+  -ContentType "application/json" `
+  -Body '{"sessionId":"<위 응답의 sessionId>","userId":"user-001","message":"반품은요?"}'
+```
+
+**RAG 흐름:**
+```
+고객 질문
+  → Redis에서 이전 대화 컨텍스트 로드
+  → KnowledgeBase 키워드 검색 (실제 서비스: 벡터 DB)
+  → [지식 + 컨텍스트 + 질문] → Gemini API
+  → 응답 저장 (Redis TTL 30분)
+  → 미해결 시 Slack 에스컬레이션
+```
+
+---
+
+### 기능 3 — LLM 기반 API 명세 자동 생성
+
+```powershell
+# 단일 엔드포인트 명세 생성
+Invoke-RestMethod "http://localhost:8090/ai/spec/generate" -Method POST `
+  -ContentType "application/json" `
+  -Body '{
+    "serviceName":"order-service",
+    "method":"POST",
+    "endpoint":"/api/orders",
+    "requestBody":"{\"userId\":1,\"productId\":1,\"quantity\":2}",
+    "responseBody":"{\"id\":1,\"status\":\"PENDING\"}",
+    "description":"Kafka Saga 패턴으로 주문을 생성합니다."
+  }'
+
+# 전체 서비스 API 명세 일괄 생성 (30~60초 소요)
+Invoke-RestMethod "http://localhost:8090/ai/spec/generate-all" -Method POST `
+  -ContentType "application/json"
+```
+
+---
+
+### 기능 4 — K6 부하 테스트 (Synthetic Data)
+
+**K6 설치:**
+
+```powershell
+winget install k6 --id k6.k6
+```
+
+**테스트 실행:**
+
+```powershell
+# 자동 실행 (Synthetic Data 사전 생성 포함)
+.\load-test\run-load-test.ps1
+
+# K6 직접 실행
+k6 run load-test\k6-load-test.js
+```
+
+**테스트 시나리오:**
+
+| 시나리오 | 내용 | 시간 |
+|----------|------|------|
+| Ramp Up | 0 → 30 VU 점진 증가 | 2분 |
+| Spike | 순간 50 VU 급증 | 50초 |
+| Soak | 10 VU 지속 유지 | 1분 |
+
+**성능 임계값 (Threshold):**
+
+| 지표 | 기준 |
+|------|------|
+| 전체 P95 응답 시간 | < 1000ms |
+| 주문 생성 P95 | < 2000ms |
+| 상품 조회 P95 (캐시) | < 500ms |
+| 주문 성공률 | > 95% |
+| HTTP 에러율 | < 5% |
+
+**AI 서비스 통합 테스트:**
+
+```powershell
+.\test-ai.ps1
+```
+
+---
+
+## 전체 서비스 포트
+
+| 서비스 | 포트 | 역할 |
+|--------|------|------|
+| API Gateway | 8080 | 단일 진입점 |
+| Eureka Server | 8761 | 서비스 레지스트리 |
+| Config Server | 8888 | 중앙 설정 (독립 실행) |
+| AI Service | 8090 | Gemini + RAG + Slack |
+| Redis | 6379 | 캐시 + 대화 컨텍스트 |
+| Kafka | 19092 | 이벤트 스트리밍 |

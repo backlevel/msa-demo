@@ -1,0 +1,21 @@
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
+    implementation 'org.springframework.cloud:spring-cloud-starter-openfeign'
+
+    // WebFlux (Gemini API 호출)
+    implementation 'org.springframework.boot:spring-boot-starter-webflux'
+
+    // Redis (RAG 대화 컨텍스트)
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+
+    // Kafka (Saga 이벤트 수신 → Slack 알림)
+    implementation 'org.springframework.kafka:spring-kafka'
+
+    // Slack SDK
+    implementation 'com.slack.api:slack-api-client:1.38.0'
+
+    // JSON
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+}

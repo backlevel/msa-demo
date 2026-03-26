@@ -157,6 +157,31 @@ services:
       - REDIS_PORT=6379
       - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
 
+
+  # ── AI 서비스 (Gemini + RAG + Slack) ─────────────────────
+  ai-service:
+    build:
+      context: .
+      dockerfile: ai-service/Dockerfile
+    ports:
+      - "8090:8090"
+    networks: [msa-net]
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      - EUREKA_SERVER=http://eureka-server:8761/eureka/
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-your-gemini-api-key}
+      - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN:-your-slack-bot-token}
+      - SLACK_CHANNEL=${SLACK_CHANNEL:-#customer-support}
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+
 networks:
   msa-net:
     driver: bridge
