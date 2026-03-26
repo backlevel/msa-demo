@@ -41,6 +41,19 @@ services:
       test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:19092"]
       interval: 15s
       retries: 8
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    ports:
+      - "18989:8080"  # 로컬 포트 18989로 접속 (8080은 다른 서비스와 중복될 수 있음)
+    depends_on:
+      - kafka        # kafka 서비스가 먼저 실행된 후 실행
+    networks: [msa-net]
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local-msa-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092 # Docker 내부 네트워크 주소 사용
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181     # Zookeeper 주소
+      DYNAMIC_CONFIG_ENABLED: 'true'                 # UI에서 설정을 동적으로 변경 가능
 
   # ── Zipkin 분산 추적 (선택사항) ────────────────────────────
   zipkin:
