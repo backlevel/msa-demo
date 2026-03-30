@@ -4,7 +4,6 @@ server:
 spring:
   application:
     name: api-gateway
-
   cloud:
     gateway:
       routes:
@@ -29,7 +28,6 @@ spring:
           filters:
             - StripPrefix=1
 
-        # ── AI Service ────────────────────────────────────
         - id: ai-service
           uri: lb://AI-SERVICE
           predicates:
@@ -54,7 +52,10 @@ management:
   endpoints:
     web:
       exposure:
-        include: health, info, gateway
+        include: health, info, gateway, prometheus, metrics
+  metrics:
+    tags:
+      application: ${spring.application.name}
 
 logging:
   pattern:

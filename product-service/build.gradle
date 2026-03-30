@@ -10,9 +10,10 @@ dependencies {
     // Kafka (재고 차감 이벤트 수신 / 결과 발행)
     implementation 'org.springframework.kafka:spring-kafka'
 
-    // Zipkin 분산 추적
+    // Micrometer (Zipkin 분산 추적 + Prometheus 메트릭)
     implementation 'io.micrometer:micrometer-tracing-bridge-brave'
     implementation 'io.zipkin.reporter2:zipkin-reporter-brave'
+    implementation 'io.micrometer:micrometer-registry-prometheus'
 
     runtimeOnly 'com.h2database:h2'
 }

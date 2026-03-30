@@ -11,6 +11,7 @@ spring:
     hibernate:
       ddl-auto: create-drop
     show-sql: true
+    defer-datasource-initialization: true
   h2:
     console:
       enabled: true
@@ -79,7 +80,16 @@ management:
   endpoints:
     web:
       exposure:
-        include: health, info, circuitbreakers
+        include: health, info, prometheus, metrics, circuitbreakers
+  endpoint:
+    prometheus:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
 
 logging:
   pattern:

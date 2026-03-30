@@ -1,0 +1,177 @@
+{
+  "title": "MSA Demo - Overview",
+  "uid": "msa-overview",
+  "tags": ["msa", "spring-boot"],
+  "timezone": "browser",
+  "refresh": "15s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "HTTP 요청 처리율 (req/s)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": "Thanos",
+          "expr": "sum(rate(http_server_requests_seconds_count[1m])) by (job)",
+          "legendFormat": "{{job}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "color": { "mode": "palette-classic" } }
+      }
+    },
+    {
+      "id": 2,
+      "title": "HTTP P95 응답 시간 (ms)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": "Thanos",
+          "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket[1m])) by (job, le)) * 1000",
+          "legendFormat": "{{job}} P95"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "ms", "color": { "mode": "palette-classic" } }
+      }
+    },
+    {
+      "id": 3,
+      "title": "HTTP 에러율 (5xx)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": "Thanos",
+          "expr": "sum(rate(http_server_requests_seconds_count{status=~\"5..\"}[1m])) by (job)",
+          "legendFormat": "{{job}} 5xx"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "color": { "mode": "palette-classic" },
+          "thresholds": { "steps": [
+            { "value": 0, "color": "green" },
+            { "value": 0.1, "color": "red" }
+          ]}
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "JVM Heap 사용량",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": "Thanos",
+          "expr": "jvm_memory_used_bytes{area=\"heap\"} / 1024 / 1024",
+          "legendFormat": "{{job}} Heap (MB)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "megabytes", "color": { "mode": "palette-classic" } }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Kafka 메시지 처리량",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": "Thanos",
+          "expr": "sum(rate(kafka_consumer_records_consumed_total[1m])) by (topic)",
+          "legendFormat": "{{topic}} consumed"
+        },
+        {
+          "datasource": "Thanos",
+          "expr": "sum(rate(kafka_producer_record_send_total[1m])) by (topic)",
+          "legendFormat": "{{topic}} produced"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "color": { "mode": "palette-classic" } }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Redis 캐시 HIT/MISS",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": "Thanos",
+          "expr": "rate(redis_keyspace_hits_total[1m])",
+          "legendFormat": "Cache HIT"
+        },
+        {
+          "datasource": "Thanos",
+          "expr": "rate(redis_keyspace_misses_total[1m])",
+          "legendFormat": "Cache MISS"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "color": { "mode": "palette-classic" } }
+      }
+    },
+    {
+      "id": 7,
+      "title": "Saga 주문 상태 분포",
+      "type": "piechart",
+      "gridPos": { "x": 0, "y": 24, "w": 8, "h": 8 },
+      "targets": [
+        {
+          "datasource": "Thanos",
+          "expr": "sum(http_server_requests_seconds_count{job=\"order-service\", uri=\"/orders\", method=\"POST\", status=\"201\"}) by (status)",
+          "legendFormat": "CONFIRMED"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "서비스 인스턴스 UP/DOWN",
+      "type": "stat",
+      "gridPos": { "x": 8, "y": 24, "w": 8, "h": 8 },
+      "targets": [
+        {
+          "datasource": "Thanos",
+          "expr": "up",
+          "legendFormat": "{{job}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } }, "type": "value" }
+          ],
+          "thresholds": { "steps": [
+            { "value": 0, "color": "red" },
+            { "value": 1, "color": "green" }
+          ]}
+        }
+      }
+    },
+    {
+      "id": 9,
+      "title": "Circuit Breaker 상태",
+      "type": "timeseries",
+      "gridPos": { "x": 16, "y": 24, "w": 8, "h": 8 },
+      "targets": [
+        {
+          "datasource": "Thanos",
+          "expr": "resilience4j_circuitbreaker_state{state=\"open\"}",
+          "legendFormat": "OPEN - {{name}}"
+        },
+        {
+          "datasource": "Thanos",
+          "expr": "resilience4j_circuitbreaker_state{state=\"closed\"}",
+          "legendFormat": "CLOSED - {{name}}"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 38
+}

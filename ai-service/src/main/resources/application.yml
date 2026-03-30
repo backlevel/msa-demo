@@ -9,6 +9,17 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       timeout: 2000ms
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ai-service-group
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      auto-offset-reset: latest
+      properties:
+        spring.json.trusted.packages: "com.example.*"
+        spring.json.use.type.headers: false
+        spring.json.value.default.type: "java.util.Map"
 
 # Gemini API 설정
 gemini:
@@ -25,9 +36,9 @@ slack:
 
 # RAG 설정
 rag:
-  context-ttl-minutes: 30        # 대화 컨텍스트 유지 시간
-  max-context-messages: 10       # 최대 컨텍스트 메시지 수
-  similarity-threshold: 0.7      # 유사도 임계값
+  context-ttl-minutes: 30
+  max-context-messages: 10
+  similarity-threshold: 0.7
 
 eureka:
   client:
@@ -41,22 +52,13 @@ management:
   endpoints:
     web:
       exposure:
-        include: health, info
+        include: health, info, prometheus, metrics
+  metrics:
+    tags:
+      application: ${spring.application.name}
 
 logging:
   pattern:
     level: "%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-}]"
   level:
     com.example.ai: DEBUG
-
-  kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
-    consumer:
-      group-id: ai-service-group
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
-      auto-offset-reset: latest
-      properties:
-        spring.json.trusted.packages: "com.example.*"
-        spring.json.use.type.headers: false
-        spring.json.value.default.type: "java.util.Map"

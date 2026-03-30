@@ -1,4 +1,4 @@
-# MSA Demo - Spring Cloud 포트폴리오 프로젝트
+# MSA Demo - Spring Cloud 프로젝트
 
 Spring Boot 3 + Spring Cloud 기반의 마이크로서비스 아키텍처 데모입니다.
 
@@ -401,3 +401,209 @@ k6 run load-test\k6-load-test.js
 | AI Service | 8090 | Gemini + RAG + Slack |
 | Redis | 6379 | 캐시 + 대화 컨텍스트 |
 | Kafka | 19092 | 이벤트 스트리밍 |
+
+---
+
+## 관측성 스택 (Observability)
+
+### 전체 구성도
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    관측성 레이어                              │
+│                                                             │
+│  ┌──────────────┐   ┌─────────────────────────────────┐    │
+│  │   메트릭      │   │         로그                     │    │
+│  │              │   │                                  │    │
+│  │ Prometheus   │   │  Filebeat → Logstash             │    │
+│  │     ↓        │   │               ↓                  │    │
+│  │ Thanos       │   │         Elasticsearch            │    │
+│  │ (Sidecar/    │   │               ↓                  │    │
+│  │  Store/      │   │            Kibana                │    │
+│  │  Query/      │   └─────────────────────────────────-┘    │
+│  │  Compactor)  │                                           │
+│  │     ↓        │   ┌─────────────────────────────────┐    │
+│  │   MinIO      │   │       Kafka 모니터링              │    │
+│  │  (S3 장기    │   │         Kafka UI                 │    │
+│  │   저장소)    │   │   + Kafka JMX Exporter           │    │
+│  └──────┬───────┘   └─────────────────────────────────┘    │
+│         │                                                   │
+│  ┌──────▼───────────────────────────────────────────────┐  │
+│  │                     Grafana                           │  │
+│  │  (Thanos + Elasticsearch 통합 대시보드)               │  │
+│  └──────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 실행 방법
+
+observability 스택은 `profiles`로 분리되어 있습니다. 필요한 것만 선택적으로 실행합니다.
+
+```powershell
+# 1. 기본 서비스만 (MSA 서비스 + Kafka + Redis)
+docker compose up --build
+
+# 2. 메트릭 모니터링 포함 (Prometheus + Thanos + Grafana + Kafka UI)
+docker compose --profile monitoring up --build
+
+# 3. 로그 수집 포함 (ELK Stack)
+docker compose --profile logging up --build
+
+# 4. 전체 실행 (모든 기능)
+docker compose --profile monitoring --profile logging --profile tracing up --build
+```
+
+### 포트 목록 (전체)
+
+| 서비스 | 포트 | 접속 URL |
+|--------|------|----------|
+| API Gateway | 8080 | http://localhost:8080 |
+| Eureka | 8761 | http://localhost:8761 |
+| Config Server | 8888 | http://localhost:8888 |
+| AI Service | 8090 | http://localhost:8090 |
+| **Kafka UI** | **8989** | **http://localhost:8989** |
+| **Prometheus** | **19090** | **http://localhost:19090** |
+| **Thanos Query** | **10902** | **http://localhost:10902** |
+| **Grafana** | **3000** | **http://localhost:3000** (admin/admin) |
+| **MinIO Console** | **9001** | **http://localhost:9001** (minioadmin/minioadmin) |
+| **Kibana** | **5601** | **http://localhost:5601** |
+| **Elasticsearch** | **19200** | **http://localhost:19200** |
+| Redis | 6379 | - |
+| Kafka | 19092 | localhost:19092 |
+| Zipkin | 19411 | http://localhost:19411 (--profile tracing) |
+
+---
+
+### Kafka UI 사용법
+
+`http://localhost:8989` 접속 후:
+
+- **Topics** — `order.created`, `stock.decreased`, `stock.failed`, `order.confirmed`, `order.cancelled` 토픽 확인
+- **Messages** — 토픽별 메시지 실시간 조회
+- **Consumer Groups** — `order-saga-group`, `ai-order-confirmed-group` 등 컨슈머 그룹 lag 모니터링
+
+```powershell
+# 주문 생성 후 Kafka UI에서 메시지 흐름 확인
+Invoke-RestMethod "http://localhost:8080/api/orders" -Method POST `
+  -ContentType "application/json" `
+  -Body '{"userId":1,"productId":1,"quantity":2}'
+
+# Kafka UI → Topics → order.created → Messages 탭에서 확인
+```
+
+---
+
+### Prometheus + Thanos 사용법
+
+**Prometheus 직접 쿼리** (단기 실시간):
+- `http://localhost:19090` → Graph 탭
+
+**Thanos Query (통합 쿼리, 장기 데이터 포함)**:
+- `http://localhost:10902` → 장기 저장된 데이터까지 단일 쿼리
+
+**주요 PromQL:**
+
+```promql
+# 서비스별 초당 요청 수
+sum(rate(http_server_requests_seconds_count[1m])) by (job)
+
+# P95 응답 시간 (ms)
+histogram_quantile(0.95,
+  sum(rate(http_server_requests_seconds_bucket[1m])) by (job, le)
+) * 1000
+
+# 주문 생성 성공률
+sum(rate(http_server_requests_seconds_count{
+  job="order-service", uri="/orders", status="201"}[5m]))
+/
+sum(rate(http_server_requests_seconds_count{
+  job="order-service", uri="/orders"}[5m]))
+
+# Circuit Breaker OPEN 여부
+resilience4j_circuitbreaker_state{state="open"}
+
+# JVM Heap 사용량
+jvm_memory_used_bytes{area="heap"} / 1024 / 1024
+
+# Kafka Consumer Lag
+kafka_consumer_group_lag
+```
+
+**Thanos 장기 저장 구조:**
+```
+Prometheus (2h 로컬 보관)
+    ↓ Thanos Sidecar (블록 업로드)
+MinIO (S3 호환 오브젝트 스토리지)
+    ↑ Thanos Store (읽기)
+    ↑ Thanos Compactor (압축/다운샘플링)
+          ↓
+Thanos Query (단일 쿼리 API)
+          ↓
+       Grafana
+```
+
+---
+
+### Grafana 사용법
+
+`http://localhost:3000` (admin / admin)
+
+**자동 프로비저닝된 대시보드:**
+- **MSA Demo - Overview** — 서비스별 요청률, P95 응답, 에러율, JVM, Kafka, Redis, Circuit Breaker
+
+**데이터소스:**
+- `Thanos` (기본값) — 장기 메트릭 쿼리
+- `Prometheus` — 실시간 단기 메트릭
+- `Elasticsearch` — 로그 분석
+
+**Kibana 대신 Grafana로 로그 보기:**
+- Grafana → Explore → Datasource: Elasticsearch
+- 인덱스 패턴: `msa-logs-*`
+- 필드 필터: `level:ERROR`, `service_name:order-service`
+
+---
+
+### ELK Stack 사용법
+
+**Kibana** `http://localhost:5601`:
+
+1. **인덱스 패턴 생성:**
+   - Stack Management → Index Patterns → `msa-logs-*` 생성
+   - Time field: `@timestamp`
+
+2. **로그 탐색:**
+   - Discover → `msa-logs-*` 선택
+   - 필터: `level:ERROR` — 에러 로그만 조회
+   - 필터: `service_name:order-service` — 특정 서비스 로그
+
+3. **주요 검색 쿼리:**
+   ```
+   level:ERROR AND service_name:order-service
+   message:"SAGA" AND level:INFO
+   trace_id:"<traceId값>" -- 분산 추적 연결
+   ```
+
+**로그 수집 흐름:**
+```
+Docker 컨테이너 로그
+    ↓ Filebeat (Docker 소켓 마운트)
+    ↓ Logstash (파싱/필터링)
+    ↓ Elasticsearch (저장, msa-logs-YYYY.MM.dd)
+    ↓ Kibana (시각화)
+```
+
+---
+
+### 메트릭 엔드포인트 확인
+
+각 서비스에서 직접 Prometheus 메트릭을 확인할 수 있습니다:
+
+```powershell
+# 각 서비스 메트릭 엔드포인트 (Gateway 경유)
+Invoke-RestMethod "http://localhost:8761/actuator/prometheus"  # Eureka
+# 서비스들은 랜덤 포트이므로 Prometheus가 자동 수집
+
+# Prometheus 타겟 상태 확인
+Invoke-RestMethod "http://localhost:19090/api/v1/targets" | ConvertTo-Json -Depth 3
+```
+

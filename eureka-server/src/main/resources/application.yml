@@ -7,13 +7,16 @@ spring:
 
 eureka:
   client:
-    register-with-eureka: false   # 자기 자신은 등록 안 함
+    register-with-eureka: false
     fetch-registry: false
   server:
-    wait-time-in-ms-when-sync-empty: 0  # 개발 환경: 시작 지연 없음
+    wait-time-in-ms-when-sync-empty: 0
 
 management:
   endpoints:
     web:
       exposure:
-        include: health, info
+        include: health, info, prometheus, metrics
+  metrics:
+    tags:
+      application: ${spring.application.name}
