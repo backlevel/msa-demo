@@ -5,82 +5,113 @@ global:
     cluster: msa-demo
     replica: prometheus-1
 
-# Thanos sidecar용 remote_write 설정
-# (Thanos가 sidecar 방식으로 블록 업로드)
 rule_files: []
 
 scrape_configs:
-  # Prometheus 자기 자신
+  # ── Prometheus 자기 자신 ──────────────────────────────────
   - job_name: prometheus
     static_configs:
       - targets: [localhost:9090]
 
-  # API Gateway
-  - job_name: api-gateway
-    metrics_path: /actuator/prometheus
-    static_configs:
-      - targets: [api-gateway:8080]
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: instance
-        replacement: api-gateway
+  # ════════════════════════════════════════════════════════
+  # Eureka 서비스 디스커버리
+  # 랜덤 포트 서비스(user/order/product)를 Eureka에서
+  # 실제 IP:Port로 동적 디스커버리
+  # ════════════════════════════════════════════════════════
+  - job_name: spring-eureka
+    eureka_sd_configs:
+      - server: http://eureka-server:8761/eureka
+        refresh_interval: 15s
 
-  # User Service
-  - job_name: user-service
-    metrics_path: /actuator/prometheus
-    static_configs:
-      - targets: [user-service:8080]
     relabel_configs:
-      - source_labels: [__address__]
-        target_label: instance
-        replacement: user-service
+      # 1. 앱 이름 → job 레이블 (소문자)
+      - source_labels: [__meta_eureka_app_name]
+        target_label: job
+        regex: (.+)
+        replacement: ${1}
 
-  # Order Service
-  - job_name: order-service
-    metrics_path: /actuator/prometheus
-    static_configs:
-      - targets: [order-service:8080]
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: instance
-        replacement: order-service
+      # 2. 메트릭 경로: Eureka 메타데이터에서 읽기
+      #    없으면 기본값 /actuator/prometheus 사용
+      - source_labels: [__meta_eureka_app_instance_metadata_prometheus_path]
+        regex: (.+)
+        target_label: __metrics_path__
+        replacement: ${1}
+      - target_label: __metrics_path__
+        regex: ^$                          # 메타데이터 없을 때 기본값
+        replacement: /actuator/prometheus
 
-  # Product Service
-  - job_name: product-service
-    metrics_path: /actuator/prometheus
-    static_configs:
-      - targets: [product-service:8080]
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: instance
-        replacement: product-service
+      # 3. 포트: Eureka 메타데이터의 prometheus.port 우선
+      #    없으면 Eureka 등록 포트 사용
+      - source_labels: [__meta_eureka_app_instance_ip_addr,
+                        __meta_eureka_app_instance_metadata_prometheus_port]
+        regex: (.+);(.+)
+        target_label: __address__
+        replacement: ${1}:${2}
 
-  # AI Service
-  - job_name: ai-service
-    metrics_path: /actuator/prometheus
-    static_configs:
-      - targets: [ai-service:8090]
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: instance
-        replacement: ai-service
+      # 4. fallback: 메타데이터 포트 없으면 Eureka 등록 포트 사용
+      - source_labels: [__meta_eureka_app_instance_ip_addr,
+                        __meta_eureka_app_instance_port]
+        regex: (.+);(.+)
+        target_label: __address__
+        # 이미 위에서 덮였으면 이 줄은 무시됨
+        # (relabel은 순차적으로 적용, 매칭되면 덮어씀)
 
-  # Eureka Server
+      # 5. 추가 레이블
+      - source_labels: [__meta_eureka_app_name]
+        target_label: application
+
+      - source_labels: [__meta_eureka_app_instance_id]
+        target_label: instance
+
+      # 6. scrape 비활성 인스턴스 제외
+      - source_labels: [__meta_eureka_app_instance_status]
+        regex: UP
+        action: keep
+
+  # ════════════════════════════════════════════════════════
+  # Static 스크랩 (Eureka에 미등록 또는 고정 포트)
+  # ════════════════════════════════════════════════════════
+
+  # Eureka Server 자체 (Eureka SD로 자기 자신은 수집 안 됨)
   - job_name: eureka-server
     metrics_path: /actuator/prometheus
     static_configs:
       - targets: [eureka-server:8761]
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: instance
-        replacement: eureka-server
+        labels:
+          application: eureka-server
+          instance: eureka-server
 
-  # Kafka Exporter (JMX metrics)
+  # AI Service (고정 포트 8090, Eureka SD에서도 수집되므로
+  # 둘 다 남겨두되 job 이름이 달라 중복 아님)
+  - job_name: ai-service-static
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: [ai-service:8090]
+        labels:
+          application: ai-service
+          instance: ai-service
+
+  # API Gateway (고정 포트 8080, Eureka SD에서도 수집)
+  - job_name: api-gateway-static
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: [api-gateway:8080]
+        labels:
+          application: api-gateway
+          instance: api-gateway
+
+  # ════════════════════════════════════════════════════════
+  # 인프라 메트릭 Exporter
+  # ════════════════════════════════════════════════════════
+
   - job_name: kafka
     static_configs:
       - targets: [kafka-exporter:9308]
+        labels:
+          application: kafka
 
-  # Redis Exporter
   - job_name: redis
     static_configs:
       - targets: [redis-exporter:9121]
+        labels:
+          application: redis

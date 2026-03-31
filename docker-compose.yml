@@ -291,6 +291,8 @@ services:
 
   filebeat:
     image: docker.elastic.co/beats/filebeat:8.11.0
+    # --strict.perms=false 옵션을 추가하여 권한 체크를 비활성화합니다.
+    command: [ "--strict.perms=false", "-e" ]
     user: root
     volumes:
       - ./observability/filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro

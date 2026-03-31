@@ -16,8 +16,9 @@ dependencies {
     // Slack SDK
     implementation 'com.slack.api:slack-api-client:1.38.0'
 
-    // JSON
+    // JSON (LocalDateTime 직렬화 포함)
     implementation 'com.fasterxml.jackson.core:jackson-databind'
+    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
 
     // Prometheus 메트릭
     implementation 'io.micrometer:micrometer-registry-prometheus'
