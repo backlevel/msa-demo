@@ -111,6 +111,7 @@ services:
   # MinIO 버킷 초기화
   minio-init:
     image: minio/mc:latest
+    user: root
     depends_on:
       minio:
         condition: service_healthy
@@ -164,6 +165,7 @@ services:
   # Thanos Store - MinIO에서 장기 데이터 서빙
   thanos-store:
     image: quay.io/thanos/thanos:v0.35.0
+    user: root
     command:
       - store
       - --grpc-address=0.0.0.0:10901
@@ -199,6 +201,7 @@ services:
   # Thanos Compactor - 블록 압축 및 다운샘플링
   thanos-compactor:
     image: quay.io/thanos/thanos:v0.35.0
+    user: root
     command:
       - compact
       - --wait
