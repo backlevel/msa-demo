@@ -47,10 +47,7 @@ eureka:
   instance:
     prefer-ip-address: true
     instance-id: ${spring.application.name}:${random.value}
-    metadata-map:
-      prometheus.scrape: "true"
-      prometheus.path: "/actuator/prometheus"
-      prometheus.port: "${server.port}"   # 실제 바인딩 포트 (랜덤)
+
 
 feign:
   circuitbreaker:
